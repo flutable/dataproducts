@@ -1,0 +1,38 @@
+---
+title: "MyTitle"
+author: "NickM"
+date: "4 May 2017"
+output: 
+  ioslides_presentation:
+  smaller: true
+  transition: faster
+  fig_width: 8
+  fig_height: 6
+---
+<!-- <# output:   colon at aend -->
+<!-- #   outputFormat: colon at end -->
+<!-- #       outputformatoptions -->
+<!-- http://rmarkdown.rstudio.com/ioslides_presentation_format.html#overview -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## R Markdown
+
+<div class="red2">
+This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+</div>
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+
+## Slide with code
+Preamble to code
+```{r, comment="",}
+head(mtcars)
+mtcars$disp * 2
+```
+## Plotting in Knitr
+```{r, echo = FALSE, fig.align= 'center', fig.cap='fish fishfish',background = "tan4"}
+plot(mtcars$wt, mtcars$mpg, xlab="Weight", ylab="MPG")
+```
