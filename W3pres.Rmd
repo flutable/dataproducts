@@ -1,0 +1,125 @@
+---
+title: "Week 3 presentation"
+author: "Nick Murray"
+date: "13 May 2017"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Synopsis
+
+This presentation shows air quality in Florey, a suburb to the north of Canberra. The author lives nearby. 
+
+## Data 
+Air quality data is available from the [ACT government's data portal](http://www.health.act.gov.au/public-information/public-health/act-air-quality-monitoring/real-time-graphs). 
+
+## Air quality data structure
+
+The downloadable (Excel-formatted CSV) air quality data contains the following variables. This report makes use of only the particulate matter and date/time fields.
+
+- GPS        Monitoring station location
+- DateTime   GPS date time field
+- NO2        Nitrogen dioxide
+- O3_1hr     Ozone hourly
+- O3_4hr     Ozone 4-hourly
+- CO         Carbon monoxide
+- PM10       PM10 = particulate matter less than 10 microns
+- PM2.5      PM10 = particulate matter less than 2.5 microns
+- Date       Date of reading
+- Time       Time of reading
+
+```{r LoadAndPreProcChk,echo=FALSE}
+options(scipen = 1, digits = 2)            # numbers > 10^5 in scientific notation, 2 sig figs
+suppressPackageStartupMessages(library(zoo,       warn.conflicts = FALSE)) # for na.locf()
+suppressPackageStartupMessages(library(dplyr,     warn.conflicts = FALSE))
+suppressPackageStartupMessages(library(stringr,   warn.conflicts = FALSE))
+suppressPackageStartupMessages(library(ggplot2,   warn.conflicts = FALSE))
+suppressPackageStartupMessages(library(lubridate, warn.conflicts = FALSE))
+suppressPackageStartupMessages(library(knitr,     warn.conflicts = FALSE))
+suppressPackageStartupMessages(library(plotly,    warn.conflicts = FALSE))
+suppressPackageStartupMessages(library(stringr,    warn.conflicts = FALSE))
+# Download data if necessary
+fnData <- "CanberraAirQuality.csv"
+
+if ( !file.exists(fnData )) {
+    message("Data file(s) missing, downloading....")
+    download.file("https://www.data.act.gov.au/api/views/vm7b-spx8/rows.csv?accessType=DOWNLOAD&bom=true&format=true", fnData)
+}
+# Read data
+if (!exists("airdata")) {
+    message("Air quality data missing, now reading. This may take a few seconds....")
+    airdata <- read.csv(file = fnData, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+} 
+```
+
+## Data processing 1
+The dataset required extensive processing before creating a plot. Initially, we just remove columns and subset the data to just the suburb I'm interested in.
+
+```{r SubSetData,echo=TRUE}
+# Fix invalid suburb column name
+colnames(airdata)[1] <- "Name"  
+
+# Keep only data for suburb "Florey" 
+airdata <- airdata[ airdata$Name %in% c("Florey"), ] 
+
+# Remove GPS columns - the formats were not consistent
+airdata <- airdata[ , !(colnames(airdata) %in% c("GPS", "DateTime"))] 
+```
+
+## Data processing 2
+Next, check that the date times are all present, then convert them to a single POSIX format column.
+```{r DP2,echo=TRUE}
+# Check for NAs in dates; 0 if all dates convert
+datecheck <- sum(!is.na(strptime(airdata$Date,"%d-%b-%y"))) 
+if (datecheck > 0)
+{stop("dates do not convert")}
+
+# convert hour and day fields to a single POSIX format DateTime
+airdata$DateTime <- str_c(airdata$Date, ' ', airdata$Time)
+airdata$DateTime <- as.POSIXct(airdata$DateTime, format="%d %b %Y %H:%M:%S")
+
+# remove now-unused Date and Time
+airdata <- airdata[ , !(colnames(airdata) %in% c("Date", "Time"))]
+```
+
+## Data processing 3
+The observations for Carbon Monoxide and PM contain NAs. To impute missing values, I used the NA "carry forward last observation" function from the Zoo package.
+
+There are several packages containing such functions, and there is a useful discusson on [StackOverflow](http://stackoverflow.com/questions/7735647/replacing-nas-with-latest-non-na-value) about NAs.
+
+```{r DP3,echo=TRUE}
+# impute missing values. If an NA, carry forward last observation
+airdata$CO    <- na.locf(airdata$CO)
+airdata$PM10  <- na.locf(airdata$PM10)
+airdata$PM2.5 <- na.locf(airdata$PM2.5)
+```
+
+## Data processing 4
+Order the data by date and time: for some reason, the original data are not recorded in correct ascending temporal order. A reading at "2017-05-03 13:00:00" may be followed by "2017-05-03 12:00:00", i.e. an hour before, leading to loops on the graphs.
+
+Finally, let's look back only 10 days, else the graph becomes crowded.
+
+```{r DP4,echo=TRUE}
+# ensure date time data are in ascending order
+dt <- order(airdata$DateTime, decreasing = FALSE) 
+airdata <- airdata[dt, ]
+
+# look back only x days, x * 86400.
+ day3 <- as.POSIXct(Sys.time() - (86400 * 10))
+ airdata <- airdata[airdata$DateTime > day3, ]
+```
+
+## The final plot
+```{r Plot,echo=FALSE}
+pFlorey <- plot_ly(airdata, x = ~DateTime, y = ~CO, name = 'Carbon Monoxide', type = 'scatter', mode = 'lines') %>%
+            add_trace(y = ~ PM10, name='Particulates 10uM', mode='lines') %>%
+            add_trace(y = ~ PM2.5, name='Particulates 2.5uM', mode='lines') %>%
+            layout(title = "Pollutants in Florey, last few days",
+              xaxis = list(title = "Date"),
+              yaxis = list (title = "Pollutant concentration"))
+pFlorey
+```
+
